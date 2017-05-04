@@ -2,31 +2,31 @@
 
 # Copyright (C) 2014 mooapp
 #
-# Licensed under the Apache License, Version 2.0 (the "License"). You may not 
-# use this file except in compliance with the License. A copy of the License 
+# Licensed under the Apache License, Version 2.0 (the "License"). You may not
+# use this file except in compliance with the License. A copy of the License
 # is located at
 #
 #        http://www.apache.org/licenses/LICENSE-2.0
 #
-# or in the "LICENSE" file accompanying this file. This file is distributed 
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either 
-# express or implied. See the License for the specific language governing 
+# or in the "LICENSE" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
 
 ########################################
 # Initial Settings
 ########################################
-SCRIPT_NAME=${0##*/} 
-SCRIPT_VERSION=1.1 
+SCRIPT_NAME=${0##*/}
+SCRIPT_VERSION=1.1
 
 ########################################
 # Usage
 ########################################
-usage() 
-{ 
+usage()
+{
     echo "Usage: $SCRIPT_NAME [options] "
-    echo "Options:" 
+    echo "Options:"
     echo -e "\t--help\tDisplays detailed usage information."
     echo -e "\t--version\tDisplays the version number."
     echo -e "\t--verify\tChecks configuration and prepares a remote call."
@@ -70,7 +70,7 @@ usage()
 SHORT_OPTS="h:,p:,U:,d:"
 LONG_OPTS="help,version,verify,verbose,debug,from-cron,profile:,id:,status,query-execution,query-execution-timeout:,session-active,session-idle,session-wait,cache-hit,tup-inserted,tup-updated,tup-deleted,tup-returned,tup-fetched,buffers-checkpoint,buffers-clean,buffers-backend,blks-read,blks-hit,txn-commit,txn-rollback,locks-acquired,locks-wait,all-items"
 
-ARGS=$(getopt -s bash --options $SHORT_OPTS --longoptions $LONG_OPTS --name $SCRIPT_NAME -- "$@" ) 
+ARGS=$(getopt -s bash --options $SHORT_OPTS --longoptions $LONG_OPTS --name $SCRIPT_NAME -- "$@" )
 
 VERIFY=0
 VERBOSE=0
@@ -103,27 +103,28 @@ BLKS_HIT=0
 TXN_COMMIT=0
 TXN_ROLLBACK=0
 LOCKS_ACQUIRED=0
+PREDICATE_LOCKS=0
 LOCKS_WAIT=0
 
 CACHE_FILE="/var/tmp/aws-mon-pgsql.cache"
 cache_buffer="# cache file for aws-mon-pgsql"
 
-eval set -- "$ARGS" 
-while true; do 
-    case $1 in 
+eval set -- "$ARGS"
+while true; do
+    case $1 in
         # General
-        --help) 
-            usage 
-            exit 0 
-            ;; 
-        --version) 
-            echo "$SCRIPT_VERSION" 
+        --help)
+            usage
+            exit 0
+            ;;
+        --version)
+            echo "$SCRIPT_VERSION"
             ;;
         --verify)
-            VERIFY=1  
-            ;; 
+            VERIFY=1
+            ;;
         --verbose)
-            VERBOSE=1   
+            VERBOSE=1
             ;;
         --debug)
             DEBUG=1
@@ -227,6 +228,10 @@ while true; do
         --locks-acquired)
             LOCKS_ACQUIRED=1
             ;;
+        # Predicate Locks
+        --predicate-locks)
+            LOCKS_ACQUIRED=1
+            ;;
         --locks-wait)
             LOCKS_WAIT=1
             ;;
@@ -250,18 +255,19 @@ while true; do
             TXN_COMMIT=1
             TXN_ROLLBACK=1
             LOCKS_ACQUIRED=1
+            PREDICATE_LOCKS=1
             LOCKS_WAIT=1
             ;;
-        --) 
+        --)
             shift
-            break 
-            ;; 
-        *) 
+            break
+            ;;
+        *)
             shift
-            break 
-            ;; 
-    esac 
-    shift 
+            break
+            ;;
+    esac
+    shift
 done
 
 
@@ -276,7 +282,7 @@ PSQL_CMD="/usr/bin/psql -h $PGHOST -p $PGPORT -U $PGUSER -d $DBNAME -A -t -c"
 ########################################
 
 # get value from previous result
-# Input format: 
+# Input format:
 #     $1 : key
 #     $2 : default value
 function getCache()
@@ -284,7 +290,7 @@ function getCache()
     if [ -f $CACHE_FILE ]; then
 	RET=`sed '/^¥#/d' $CACHE_FILE | grep "^${1}"  | tail -n 1 | sed -e 's/^.*=//'`
     fi
-    
+
     if [ -z "$RET" ]; then
         RET=$2
     fi
@@ -292,10 +298,10 @@ function getCache()
     echo $RET
 }
 
-# set value into cache 
+# set value into cache
 # (this function writes temporary buffer and does not write cache file yet)
 #
-# Input format: 
+# Input format:
 #     $1 : key
 #     $2 : value
 function setCache()
@@ -564,6 +570,17 @@ if [ $LOCKS_ACQUIRED -eq 1 ]; then
     fi
 fi
 
+if [ $PREDICATE_LOCKS -eq 1 ]; then
+    query="SELECT count(*) FROM pg_locks WHERE mode='SIReadLock'"
+    predicate_locks=`$PSQL_CMD "$query"`
+    if [ $VERBOSE -eq 1 ]; then
+        echo "predicate_locks:$predicate_locks"
+    fi
+    if [ $VERIFY -eq 0 ]; then
+        aws cloudwatch put-metric-data --metric-name "PredicateLocks" --value "$predicate_locks" --unit "Count" $CLOUDWATCH_OPTS
+    fi
+fi
+
 if [ $LOCKS_WAIT -eq 1 ]; then
     query="SELECT count(*) FROM pg_locks WHERE granted=false"
     locks_wait=`$PSQL_CMD "$query"`
@@ -669,4 +686,3 @@ fi
 
 # Write cache buffer
 writeCache
-
