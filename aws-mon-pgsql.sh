@@ -256,6 +256,7 @@ while true; do
             BUFFERS_CHECKPOINT=1
             BUFFERS_CLEAN=1
             BUFFERS_BACKEND=1
+            BLKS_HIT=1
             BLKS_READ=1
             TXN_COMMIT=1
             TXN_ROLLBACK=1
