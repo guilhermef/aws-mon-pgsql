@@ -105,6 +105,7 @@ TXN_ROLLBACK=0
 LOCKS_ACQUIRED=0
 PREDICATE_LOCKS=0
 OLDEST_QUERY_AGE=0
+OLDEST_TRANSACTION_AGE=0
 LOCKS_WAIT=0
 
 CACHE_FILE="/var/tmp/aws-mon-pgsql.cache"
@@ -240,6 +241,10 @@ while true; do
         --oldest-query-age)
             OLDEST_QUERY_AGE=1
             ;;
+        # Oldest transaction age
+        --oldest-transaction-age)
+            OLDEST_TRANSACTION_AGE=1
+            ;;
         # All items
         --all-items)
             STATUS=1
@@ -263,6 +268,7 @@ while true; do
             LOCKS_ACQUIRED=1
             PREDICATE_LOCKS=1
             OLDEST_QUERY_AGE=1
+            OLDEST_TRANSACTION_AGE=1
             LOCKS_WAIT=1
             ;;
         --)
@@ -596,6 +602,17 @@ if [ $OLDEST_QUERY_AGE -eq 1 ]; then
     fi
     if [ $VERIFY -eq 0 ]; then
         aws cloudwatch put-metric-data --metric-name "OldestQueryAge" --value "$oldest_query_age" --unit "Count" $CLOUDWATCH_OPTS
+    fi
+fi
+
+if [ $OLDEST_TRANSACTION_AGE -eq 1 ]; then
+    query="SELECT cast(extract(epoch from now() - xact_start) as integer) as age FROM pg_stat_activity WHERE xact_start IS NOT NULL ORDER BY xact_start ASC LIMIT 1"
+    oldest_transaction_age=`$PSQL_CMD "$query"`
+    if [ $VERBOSE -eq 1 ]; then
+        echo "oldest_transaction_age:$oldest_transaction_age"
+    fi
+    if [ $VERIFY -eq 0 ]; then
+        aws cloudwatch put-metric-data --metric-name "OldestTransactionAge" --value "$oldest_transaction_age" --unit "Count" $CLOUDWATCH_OPTS
     fi
 fi
 
