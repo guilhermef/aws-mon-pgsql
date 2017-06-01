@@ -595,7 +595,7 @@ if [ $PREDICATE_LOCKS -eq 1 ]; then
 fi
 
 if [ $OLDEST_QUERY_AGE -eq 1 ]; then
-    query="SELECT cast(extract(epoch from now() - query_start) as integer) as age FROM pg_stat_activity WHERE query != '<IDLE>' AND query NOT ILIKE '%pg_stat_activity%' AND query_start IS NOT NULL ORDER BY age DESC LIMIT 1"
+    query="SELECT cast(extract(epoch from now() - query_start) as integer) as age FROM pg_stat_activity WHERE state='active' AND query NOT ILIKE '%pg_stat_activity%' AND query_start IS NOT NULL ORDER BY age DESC LIMIT 1"
     oldest_query_age=`$PSQL_CMD "$query"`
     if [ $VERBOSE -eq 1 ]; then
         echo "oldest_query_age:$oldest_query_age"
